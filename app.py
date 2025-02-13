@@ -1,14 +1,38 @@
 import streamlit as st
+import os
+import requests
 import sqlite3
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.font_manager as font_manager
 import numpy as np
 import io
 
-# --- 1. 先設定頁面資訊 (最重要！不能有其他 st. 呼叫在它之前) ---
+# ========== 1. 設定頁面資訊 (不能放在任何其他 st. 呼叫之後) ==========
 st.set_page_config(page_title="工程專案資料庫", layout="wide")
 
-# --- 2. 再加入全域 CSS，強制使用支援中文字的字型 ---
+# ========== 2. 下載並註冊中文字型 ==========
+# 目標：Noto Sans CJK TC (繁體中文)
+FONT_URL = "https://github.com/googlefonts/noto-cjk/blob/main/Sans/OTF/TraditionalChinese/NotoSansCJKtc-Regular.otf?raw=true"
+FONT_PATH = "NotoSansCJKtc-Regular.otf"
+
+# 如果本地沒有這個字型檔，則下載
+if not os.path.exists(FONT_PATH):
+    try:
+        r = requests.get(FONT_URL)
+        with open(FONT_PATH, "wb") as f:
+            f.write(r.content)
+    except Exception as e:
+        st.error(f"字型檔下載失敗: {e}")
+
+# 通知 Matplotlib 新增一個字型
+font_manager.fontManager.addfont(FONT_PATH)
+# 設定 Matplotlib 預設字型為剛下載的 NotoSansCJKtc-Regular
+plt.rcParams['font.sans-serif'] = ['NotoSansCJKtc-Regular']
+plt.rcParams['axes.unicode_minus'] = False
+
+# ========== 3. (選擇性) 再加入全域 CSS，讓 Streamlit UI 使用 Noto Sans TC ==========
+# UI 的文字與 Matplotlib 是分開處理的。UI 透過瀏覽器字型渲染，可以直接用 Google Fonts。
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
@@ -17,15 +41,6 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
-
-# --- 3. Matplotlib 中文字型設定 ---
-plt.rcParams['font.sans-serif'] = [
-    'Noto Sans CJK TC',   # Google 推出的免費中文字型
-    'Microsoft JhengHei', # Windows 預設
-    'SimHei',             # Linux 部分環境有安裝
-    'WenQuanYi Zen Hei'   # Ubuntu 常見中文字型
-]
-plt.rcParams['axes.unicode_minus'] = False
 
 # ==================================
 # 版本及作者資訊
@@ -251,7 +266,6 @@ def analyze_yearly_trend():
         st.warning("目前沒有專案資料，無法進行年度分析。")
         return
 
-    # 轉數值
     df["contract_price"] = pd.to_numeric(df["contract_price"], errors="coerce")
     df["id"] = pd.to_numeric(df["id"], errors="coerce")
 
@@ -351,7 +365,6 @@ def analyze_contractor_distribution():
 # Streamlit 主程式
 # ==================================
 def main():
-    # 注意：這裡不能再呼叫 st.set_page_config()，已在最上方做了
     st.title("🏗️ 工程專案資料庫 (Streamlit 版)")
 
     # 初始化資料庫
@@ -511,7 +524,5 @@ def main():
 # 主程式進入點
 # ==================================
 if __name__ == "__main__":
-    # 初始化資料庫 (若第一次執行沒有 projects.db，會自動建立)
     init_db()
-    # 執行主程式
     main()
