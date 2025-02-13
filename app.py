@@ -339,7 +339,7 @@ def analyze_contractor_distribution():
 # ==================================
 def main():
     st.set_page_config(page_title="工程專案資料庫", layout="wide")
-    st.title("🏗️ 工程專案資料庫 (Streamlit 版)")
+    st.title("🏗️ 工程專案資料庫")
 
     # 初始化資料庫
     init_db()
