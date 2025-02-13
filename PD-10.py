@@ -45,30 +45,19 @@ def show_about_info():
     )
     messagebox.showinfo("版本資訊", info)
 
-# ========================
-# 建立主視窗
-# ========================
-root = tk.Tk()
-root.title("工程專案資料庫")
-root.geometry("1100x700")  # 調整視窗大小
-
-# 加入選單列
-menubar = tk.Menu(root)
-about_menu = tk.Menu(menubar, tearoff=0)
-about_menu.add_command(label="版本資訊", command=show_about_info)
-menubar.add_cascade(label="關於", menu=about_menu)
-root.config(menu=menubar)
-
-# 設定 Treeview style，調整列高為 80
-style = ttk.Style()
-style.configure("Treeview", rowheight=80)
+# ------------------------
+# 全域變數 (登入使用)
+# ------------------------
+current_user = None
+current_role = None
 
 # ========================
-# 資料庫及功能函式定義
+# 建立資料庫及相關資料表
 # ========================
 def init_db():
     conn = sqlite3.connect("projects.db")
     cursor = conn.cursor()
+    # 建立專案資料表（若不存在則建立；現有資料不受影響）
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,9 +72,165 @@ def init_db():
             remarks TEXT
         );
     ''')
+    # 建立使用者資料表，如果已存在則不丟棄，保留既有資料
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password TEXT NOT NULL,
+            role TEXT NOT NULL
+        );
+    ''')
+    # 如果管理員帳號不存在，則插入預設管理員
+    cursor.execute("SELECT * FROM users WHERE username = ?", ("admin",))
+    if cursor.fetchone() is None:
+        cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", ("admin", "admin123", "admin"))
     conn.commit()
     conn.close()
 
+# ========================
+# 登入介面與驗證函式
+# ========================
+def show_login_window():
+    login_win = tk.Toplevel()
+    login_win.title("登入")
+    login_win.geometry("300x200")
+    login_win.grab_set()  # 強制使用者在此視窗操作
+
+    tk.Label(login_win, text="使用者名稱:").pack(pady=5)
+    entry_username = tk.Entry(login_win)
+    entry_username.pack(pady=5)
+    tk.Label(login_win, text="密碼:").pack(pady=5)
+    entry_password = tk.Entry(login_win, show="*")
+    entry_password.pack(pady=5)
+
+    def login():
+        username = entry_username.get().strip()
+        password = entry_password.get().strip()
+        if not username or not password:
+            messagebox.showwarning("警告", "請輸入使用者名稱與密碼")
+            return
+        conn = sqlite3.connect("projects.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT role FROM users WHERE username = ? AND password = ?", (username, password))
+        result = cursor.fetchone()
+        conn.close()
+        if result:
+            global current_user, current_role
+            current_user = username
+            current_role = result[0]
+            messagebox.showinfo("成功", f"歡迎 {username}")
+            login_win.destroy()
+            root.deiconify()
+            # 若登入者為管理員，加入帳號管理選單
+            if current_role == "admin":
+                account_menu = tk.Menu(menubar, tearoff=0)
+                account_menu.add_command(label="帳號管理", command=manage_accounts)
+                menubar.add_cascade(label="帳號管理", menu=account_menu)
+                root.config(menu=menubar)
+        else:
+            messagebox.showerror("錯誤", "使用者名稱或密碼錯誤")
+    tk.Button(login_win, text="登入", command=login).pack(pady=10)
+
+# ========================
+# 帳號管理介面 (僅限管理員使用)
+# ========================
+def manage_accounts():
+    win = tk.Toplevel(root)
+    win.title("帳號管理")
+    # 設定較大的視窗尺寸，並固定下半部區域高度
+    win.geometry("600x500")
+
+    # ========== 上半部：帳號清單 (TreeView) ==========
+    frame_top = tk.Frame(win)
+    frame_top.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+    tree_accounts = ttk.Treeview(frame_top, columns=("帳號", "角色"), show="headings")
+    tree_accounts.heading("帳號", text="帳號")
+    tree_accounts.column("帳號", width=150)
+    tree_accounts.heading("角色", text="角色")
+    tree_accounts.column("角色", width=100)
+    tree_accounts.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    scrollbar = ttk.Scrollbar(frame_top, orient=tk.VERTICAL, command=tree_accounts.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    tree_accounts.configure(yscrollcommand=scrollbar.set)
+
+    def refresh_accounts():
+        for item in tree_accounts.get_children():
+            tree_accounts.delete(item)
+        conn = sqlite3.connect("projects.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, role FROM users")
+        for row in cursor.fetchall():
+            tree_accounts.insert("", tk.END, values=row)
+        conn.close()
+
+    refresh_accounts()
+
+    # ========== 下半部：新增帳號區域 ==========
+    frame_add = tk.Frame(win, height=150)
+    frame_add.pack(side=tk.TOP, fill=tk.X, padx=10, pady=5)
+    frame_add.pack_propagate(False)  # 固定 frame_add 的高度
+
+    tk.Label(frame_add, text="帳號:").grid(row=0, column=0)
+    entry_new_username = tk.Entry(frame_add)
+    entry_new_username.grid(row=0, column=1, padx=5, pady=5)
+
+    tk.Label(frame_add, text="密碼:").grid(row=1, column=0)
+    entry_new_password = tk.Entry(frame_add, show="*")
+    entry_new_password.grid(row=1, column=1, padx=5, pady=5)
+
+    tk.Label(frame_add, text="角色:").grid(row=2, column=0)
+    combo_role = ttk.Combobox(frame_add, values=["admin", "user"], state="readonly")
+    combo_role.current(1)  # 預設選 "user"
+    combo_role.grid(row=2, column=1, padx=5, pady=5)
+
+    def add_account():
+        username = entry_new_username.get().strip()
+        password = entry_new_password.get().strip()
+        role = combo_role.get().strip()
+        if not username or not password:
+            messagebox.showwarning("警告", "請填寫帳號與密碼")
+            return
+        try:
+            conn = sqlite3.connect("projects.db")
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO users (username, password, role) VALUES (?, ?, ?)", (username, password, role))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("成功", "帳號已新增")
+            refresh_accounts()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("錯誤", "該帳號已存在")
+
+    btn_add_account = tk.Button(frame_add, text="新增帳號", command=add_account)
+    btn_add_account.grid(row=3, column=0, columnspan=2, pady=5)
+
+    # ========== 最下方：刪除帳號按鈕 ==========
+    def delete_account():
+        selected = tree_accounts.selection()
+        if not selected:
+            messagebox.showwarning("警告", "請選擇要刪除的帳號")
+            return
+        for item in selected:
+            del_username = tree_accounts.item(item)['values'][0]
+            if del_username == current_user:
+                messagebox.showwarning("警告", "無法刪除當前登入的帳號")
+                continue
+            conn = sqlite3.connect("projects.db")
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM users WHERE username = ?", (del_username,))
+            conn.commit()
+            conn.close()
+        messagebox.showinfo("成功", "選定的帳號已刪除")
+        refresh_accounts()
+
+    btn_delete_account = tk.Button(win, text="刪除選定帳號", command=delete_account)
+    btn_delete_account.pack(side=tk.TOP, pady=5)
+
+# ========================
+# 其餘資料庫及功能函式定義 (專案管理、查詢、圖表分析等)
+# ========================
 def add_project():
     try:
         contract_price = float(entry_contract.get().replace(',', ''))
@@ -404,8 +549,6 @@ def import_excel():
 # ========================
 # 分析功能函式
 # ========================
-
-# 1. 年度趨勢分析（直條圖上加數據標籤）
 def analyze_yearly_trend():
     conn = sqlite3.connect("projects.db")
     df = pd.read_sql_query("SELECT * FROM projects", conn)
@@ -435,7 +578,6 @@ def analyze_yearly_trend():
     plt.tight_layout()
     plt.show()
 
-# 2. 廠商與市場分佈分析（圓餅圖：各廠商專案數比例，標籤固定放置於視窗左右兩側垂直排列，貼齊邊緣）
 def analyze_contractor_distribution():
     conn = sqlite3.connect("projects.db")
     df = pd.read_sql_query("SELECT * FROM projects", conn)
@@ -448,7 +590,6 @@ def analyze_contractor_distribution():
     wedges, _ = ax.pie(contractor_count.values, explode=explode, startangle=90, labels=None)
     ax.set_title("各廠商專案數比例")
     
-    # 收集各扇區資訊
     labels_info = []
     for i, wedge in enumerate(wedges):
         angle = (wedge.theta2 + wedge.theta1) / 2.0
@@ -464,13 +605,11 @@ def analyze_contractor_distribution():
             "group": group
         })
     
-    # 分組
     left_labels = [d for d in labels_info if d["group"] == "left"]
     right_labels = [d for d in labels_info if d["group"] == "right"]
     left_labels.sort(key=lambda d: d["wedge_center"][1], reverse=True)
     right_labels.sort(key=lambda d: d["wedge_center"][1], reverse=True)
     
-    # 為左右兩組分配固定垂直位置：左右固定 x 座標分別 -1.3 與 +1.3，y 均勻分佈
     def assign_y_positions(group, side):
         n = len(group)
         if n == 0:
@@ -482,7 +621,6 @@ def analyze_contractor_distribution():
     assign_y_positions(left_labels, "left")
     assign_y_positions(right_labels, "right")
     
-    # 標註各標籤：標籤內容為「百分比 廠商名稱」
     for d in left_labels + right_labels:
         x, y = d["wedge_center"]
         label_x, label_y = d["label_pos"]
@@ -496,8 +634,23 @@ def analyze_contractor_distribution():
     plt.show()
 
 # ========================
-# 建立 Notebook 分頁
+# 建立主視窗及 Notebook 分頁
 # ========================
+root = tk.Tk()
+root.title("工程專案資料庫")
+root.geometry("1100x700")  # 調整視窗大小
+
+# 建立選單列 (後續若有管理員登入將動態加入「帳號管理」選單)
+menubar = tk.Menu(root)
+about_menu = tk.Menu(menubar, tearoff=0)
+about_menu.add_command(label="版本資訊", command=show_about_info)
+menubar.add_cascade(label="關於", menu=about_menu)
+root.config(menu=menubar)
+
+# 設定 Treeview style，調整列高為 80
+style = ttk.Style()
+style.configure("Treeview", rowheight=80)
+
 notebook = ttk.Notebook(root)
 tab_manage = ttk.Frame(notebook)
 tab_analysis = ttk.Frame(notebook)
@@ -595,7 +748,6 @@ h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
 tree.configure(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
 tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-# 設定交替列背景色
 tree.tag_configure("evenrow", background="lightblue")
 tree.tag_configure("oddrow", background="white")
 
@@ -612,9 +764,11 @@ btn_contractor = tk.Button(lf_analysis, text="廠商與市場分佈分析", widt
 btn_contractor.grid(row=0, column=1, padx=5, pady=5)
 
 # ========================
-# 初始化資料庫與表格顯示
+# 初始化資料庫與顯示
 # ========================
 init_db()
+root.withdraw()  # 先隱藏主視窗，顯示登入介面
+show_login_window()
 refresh_table()
 
 root.mainloop()
