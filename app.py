@@ -492,14 +492,7 @@ def main():
         **更新紀錄**：  
         {UPDATE_LOG}
         """
-        st.markdown("""
-    <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
-    * {
-        font-family: 'Noto Sans TC', sans-serif;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+        st.markdown(info)
 
 # ==================================
 # 主程式進入點
