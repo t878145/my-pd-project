@@ -5,7 +5,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import io
 
-# 加入 Streamlit 全域 CSS，強制使用支援中文字的字型
+# --- 1. 先設定頁面資訊 (最重要！不能有其他 st. 呼叫在它之前) ---
+st.set_page_config(page_title="工程專案資料庫", layout="wide")
+
+# --- 2. 再加入全域 CSS，強制使用支援中文字的字型 ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
@@ -15,9 +18,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 設定 matplotlib 使用支援中文的備選字型清單
+# --- 3. Matplotlib 中文字型設定 ---
 plt.rcParams['font.sans-serif'] = [
-    'Noto Sans CJK TC',  # Google 推出的免費中文字型，跨平台支援不錯
+    'Noto Sans CJK TC',   # Google 推出的免費中文字型
     'Microsoft JhengHei', # Windows 預設
     'SimHei',             # Linux 部分環境有安裝
     'WenQuanYi Zen Hei'   # Ubuntu 常見中文字型
@@ -25,7 +28,7 @@ plt.rcParams['font.sans-serif'] = [
 plt.rcParams['axes.unicode_minus'] = False
 
 # ==================================
-# 版本及作者資訊 (對應原程式)
+# 版本及作者資訊
 # ==================================
 CURRENT_VERSION = "1.0.11"
 UPDATE_LOG = """版本更新紀錄：
@@ -348,7 +351,7 @@ def analyze_contractor_distribution():
 # Streamlit 主程式
 # ==================================
 def main():
-    st.set_page_config(page_title="工程專案資料庫", layout="wide")
+    # 注意：這裡不能再呼叫 st.set_page_config()，已在最上方做了
     st.title("🏗️ 工程專案資料庫 (Streamlit 版)")
 
     # 初始化資料庫
@@ -508,4 +511,7 @@ def main():
 # 主程式進入點
 # ==================================
 if __name__ == "__main__":
+    # 初始化資料庫 (若第一次執行沒有 projects.db，會自動建立)
+    init_db()
+    # 執行主程式
     main()
