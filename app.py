@@ -5,6 +5,16 @@ import matplotlib.pyplot as plt
 import numpy as np
 import io
 
+# 加入 Streamlit 全域 CSS，強制使用支援中文字的字型
+st.markdown("""
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC&display=swap');
+    * {
+        font-family: 'Noto Sans TC', sans-serif;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # 設定 matplotlib 使用支援中文的備選字型清單
 plt.rcParams['font.sans-serif'] = [
     'Noto Sans CJK TC',  # Google 推出的免費中文字型，跨平台支援不錯
